@@ -1,0 +1,191 @@
+# name: test/sql/read_pdf.test
+# description: test read_pdf extension
+# group: [sql]
+
+# Before we load the extension, this will fail
+statement error
+SELECT * FROM read_pdf('Sam');
+----
+Catalog Error: Table Function with name read_pdf does not exist!
+
+# Require statement will ensure this test is run with this extension loaded
+require read_pdf
+
+###############################################################################
+# Basic reads
+###############################################################################
+
+# Single filled PDF returns one row with field values
+query III
+SELECT source_file, Name_First, Name_Last FROM read_pdf('__TEST_DIR__/../../pdf/filled.pdf');
+----
+filled.pdf	Merluzzo	Maurizio
+
+# Single empty PDF returns one row with NULL text fields
+query III
+SELECT source_file, Name_First, Name_Last FROM read_pdf('__TEST_DIR__/../../pdf/empty.pdf');
+----
+empty.pdf	NULL	NULL
+
+# Directory scan returns one row per PDF
+query I
+SELECT count(*) FROM read_pdf('__TEST_DIR__/../../pdf/');
+----
+2
+
+# Glob pattern returns matching PDFs sorted by name
+query III
+SELECT source_file, Name_First, Name_Last FROM read_pdf('__TEST_DIR__/../../pdf/*.pdf');
+----
+empty.pdf	NULL	NULL
+filled.pdf	Merluzzo	Maurizio
+
+###############################################################################
+# Non-.pdf file extension
+###############################################################################
+
+# An explicitly named single file is accepted regardless of its extension
+query III
+SELECT source_file, Name_First, Name_Last FROM read_pdf('__TEST_DIR__/../../pdf/filled.form');
+----
+filled.form	Merluzzo	Maurizio
+
+# Glob expansion does NOT pick up non-.pdf files — no matches means an error regardless of ignore_errors
+statement error
+SELECT * FROM read_pdf('__TEST_DIR__/../../pdf/*.form', ignore_errors=true);
+----
+
+###############################################################################
+# Error handling — corrupt / unreadable files
+###############################################################################
+
+# A corrupt file fails by default
+statement error
+SELECT * FROM read_pdf('__TEST_DIR__/../../pdf/bad/corrupt.pdf');
+----
+
+# With ignore_errors=true a single corrupt file still errors: no schema can be derived
+# (ignore_errors skips files during scan, but the schema must come from at least one valid file)
+statement error
+SELECT * FROM read_pdf('__TEST_DIR__/../../pdf/bad/corrupt.pdf', ignore_errors=true);
+----
+
+# A non-existent path always fails regardless of ignore_errors (nothing to skip)
+statement error
+SELECT * FROM read_pdf('__TEST_DIR__/../../pdf/nonexistent.pdf', ignore_errors=true);
+----
+
+# A glob with a mix of good and corrupt files:
+# without ignore_errors, the corrupt file (sorted first) aborts at schema derivation
+statement error
+SELECT * FROM read_pdf('__TEST_DIR__/../../pdf/bad/*.pdf');
+----
+
+# With ignore_errors=true, the corrupt file is skipped and the good file is returned
+query III
+SELECT source_file, Name_First, Name_Last
+FROM read_pdf('__TEST_DIR__/../../pdf/bad/*.pdf', ignore_errors=true);
+----
+filled.pdf	Merluzzo	Maurizio
+
+###############################################################################
+# password parameter
+###############################################################################
+
+# The password parameter is accepted for an unencrypted file and does not affect the result
+query III
+SELECT source_file, Name_First, Name_Last
+FROM read_pdf('__TEST_DIR__/../../pdf/filled.pdf', password='irrelevant');
+----
+filled.pdf	Merluzzo	Maurizio
+
+###############################################################################
+# Secret Manager — "pdf" secret type
+###############################################################################
+
+# The "pdf" secret type must be registered by the extension
+query I
+SELECT count(*) FROM duckdb_secret_types() WHERE type = 'pdf';
+----
+1
+
+# Creating a temporary pdf secret must succeed
+statement ok
+CREATE OR REPLACE TEMPORARY SECRET test_pdf_secret (
+    TYPE pdf,
+    password 'hunter2',
+    SCOPE '__TEST_DIR__/../../pdf/'
+);
+
+# The secret is listed and the password is redacted in the default view
+query I
+SELECT count(*) FROM duckdb_secrets() WHERE name = 'test_pdf_secret';
+----
+1
+
+# An unencrypted file is still readable when a matching secret exists
+# (the password is passed to qpdf, which ignores it for unencrypted files)
+query III
+SELECT source_file, Name_First, Name_Last
+FROM read_pdf('__TEST_DIR__/../../pdf/filled.pdf');
+----
+filled.pdf	Merluzzo	Maurizio
+
+statement ok
+DROP SECRET test_pdf_secret;
+
+###############################################################################
+# Encrypted PDF tests
+# These tests require a fixture created with:
+#
+#   qpdf --encrypt "testpass" "testpass" 128 -- \
+#       pdf/filled.pdf pdf/encrypted.pdf
+#
+# Once pdf/encrypted.pdf exists, uncomment the blocks below and re-run the tests.
+###############################################################################
+
+## -- correct password via parameter --
+## query III
+## SELECT source_file, Name_First, Name_Last
+## FROM read_pdf('__TEST_DIR__/../../pdf/encrypted.pdf', password='testpass');
+## ----
+## encrypted.pdf	Merluzzo	Maurizio
+
+## -- wrong password errors --
+## statement error
+## SELECT * FROM read_pdf('__TEST_DIR__/../../pdf/encrypted.pdf', password='wrong');
+## ----
+
+## -- password resolved via matching secret, no explicit parameter --
+## statement ok
+## CREATE TEMPORARY SECRET enc_test (
+##     TYPE pdf,
+##     password 'testpass',
+##     SCOPE '__TEST_DIR__/../../pdf/'
+## );
+##
+## query III
+## SELECT source_file, Name_First, Name_Last
+## FROM read_pdf('__TEST_DIR__/../../pdf/encrypted.pdf');
+## ----
+## encrypted.pdf	Merluzzo	Maurizio
+##
+## statement ok
+## DROP SECRET enc_test;
+
+## -- explicit password beats a matching secret with the wrong password --
+## statement ok
+## CREATE TEMPORARY SECRET wrong_secret (
+##     TYPE pdf,
+##     password 'wrongpass',
+##     SCOPE '__TEST_DIR__/../../pdf/'
+## );
+##
+## query III
+## SELECT source_file, Name_First, Name_Last
+## FROM read_pdf('__TEST_DIR__/../../pdf/encrypted.pdf', password='testpass');
+## ----
+## encrypted.pdf	Merluzzo	Maurizio
+##
+## statement ok
+## DROP SECRET wrong_secret;
