@@ -1,7 +1,8 @@
 {
         "dependencies": [
                 "openssl",
-                "qpdf"
+                "qpdf",
+                "libjpeg-turbo"
         ],
         "vcpkg-configuration": {
                 "overlay-ports": [
