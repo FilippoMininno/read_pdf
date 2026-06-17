@@ -38,6 +38,11 @@ target_link_libraries(${LOADABLE_EXTENSION_NAME}
     qpdf::libqpdf OpenSSL::SSL OpenSSL::Crypto JPEG::JPEG ZLIB::ZLIB
 )
 
+target_link_directories(${EXTENSION_NAME} PRIVATE
+    "${CMAKE_BINARY_DIR}/vcpkg_installed/${VCPKG_TARGET_TRIPLET}/lib")
+target_link_directories(${LOADABLE_EXTENSION_NAME} PRIVATE
+    "${CMAKE_BINARY_DIR}/vcpkg_installed/${VCPKG_TARGET_TRIPLET}/lib")
+
 install(
   TARGETS ${EXTENSION_NAME}
   EXPORT "${DUCKDB_EXPORT_SET}"
