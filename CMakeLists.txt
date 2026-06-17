@@ -11,6 +11,14 @@ find_package(qpdf REQUIRED)
 find_package(JPEG REQUIRED)   
 find_package(ZLIB REQUIRED)
 
+get_target_property(_qpdf_libs qpdf::libqpdf INTERFACE_LINK_LIBRARIES)
+if(_qpdf_libs)
+    list(TRANSFORM _qpdf_libs REPLACE "^jpeg$" "JPEG::JPEG")
+    list(TRANSFORM _qpdf_libs REPLACE "^z$"    "ZLIB::ZLIB")
+    set_target_properties(qpdf::libqpdf PROPERTIES
+        INTERFACE_LINK_LIBRARIES "${_qpdf_libs}")
+endif()
+
 set(EXTENSION_NAME ${TARGET_NAME}_extension)
 set(LOADABLE_EXTENSION_NAME ${TARGET_NAME}_loadable_extension)
 
@@ -37,11 +45,6 @@ target_link_libraries(${EXTENSION_NAME}
 target_link_libraries(${LOADABLE_EXTENSION_NAME}
     qpdf::libqpdf OpenSSL::SSL OpenSSL::Crypto JPEG::JPEG ZLIB::ZLIB
 )
-
-target_link_directories(${EXTENSION_NAME} PRIVATE
-    "${CMAKE_BINARY_DIR}/vcpkg_installed/${VCPKG_TARGET_TRIPLET}/lib")
-target_link_directories(${LOADABLE_EXTENSION_NAME} PRIVATE
-    "${CMAKE_BINARY_DIR}/vcpkg_installed/${VCPKG_TARGET_TRIPLET}/lib")
 
 install(
   TARGETS ${EXTENSION_NAME}
