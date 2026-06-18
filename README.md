@@ -1,3 +1,4 @@
+![Build Status](https://img.shields.io/github/actions/workflow/status/FilippoMininno/read_pdf/MainDistributionPipeline.yml)
 # read_pdf
 
 A [DuckDB](https://duckdb.org) extension that reads AcroForm fields from PDF files into tables.
