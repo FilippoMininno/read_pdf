@@ -332,7 +332,7 @@ static void PdfFormScan(ClientContext &context, TableFunctionInput &data, DataCh
 			continue;
 		}
 
-		output.SetValue(0, row, Value(fs.ExtractName(path)));
+		output.SetValue(0, row, Value(path)); 
 		for (idx_t col = 0; col < bind_data.column_names.size(); col++) {
 			auto it = values.find(bind_data.raw_field_names[col]);
 			output.SetValue(col + 1, row, (it == values.end() || it->second.empty()) ? Value() : Value(it->second));
