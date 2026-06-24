@@ -13,17 +13,28 @@ require read_pdf
 
 ###############################################################################
 # Basic reads
+#
+# source_file now holds the full path as DuckDB resolved it, not just the
+# basename. Value assertions below wrap it in parse_filename(...) to trim back
+# to a stable basename; the full-path behavior itself is checked separately.
 ###############################################################################
 
 # Single filled PDF returns one row with field values
 query III
-SELECT source_file, Name_First, Name_Last FROM read_pdf('__TEST_DIR__/../../pdf/filled.pdf');
+SELECT parse_filename(source_file), Name_First, Name_Last FROM read_pdf('__TEST_DIR__/../../pdf/filled.pdf');
 ----
 filled.pdf	Merluzzo	Maurizio
 
+# source_file contains the full path: a directory component is present, so the
+# raw value differs from its own basename. Separator-agnostic (works on \ and /).
+query I
+SELECT source_file <> parse_filename(source_file) FROM read_pdf('__TEST_DIR__/../../pdf/filled.pdf');
+----
+true
+
 # Single empty PDF returns one row with NULL text fields
 query III
-SELECT source_file, Name_First, Name_Last FROM read_pdf('__TEST_DIR__/../../pdf/empty.pdf');
+SELECT parse_filename(source_file), Name_First, Name_Last FROM read_pdf('__TEST_DIR__/../../pdf/empty.pdf');
 ----
 empty.pdf	NULL	NULL
 
@@ -35,7 +46,7 @@ SELECT count(*) FROM read_pdf('__TEST_DIR__/../../pdf/');
 
 # Glob pattern returns matching PDFs sorted by name
 query III
-SELECT source_file, Name_First, Name_Last FROM read_pdf('__TEST_DIR__/../../pdf/*.pdf');
+SELECT parse_filename(source_file), Name_First, Name_Last FROM read_pdf('__TEST_DIR__/../../pdf/*.pdf');
 ----
 empty.pdf	NULL	NULL
 filled.pdf	Merluzzo	Maurizio
@@ -46,7 +57,7 @@ filled.pdf	Merluzzo	Maurizio
 
 # An explicitly named single file is accepted regardless of its extension
 query III
-SELECT source_file, Name_First, Name_Last FROM read_pdf('__TEST_DIR__/../../pdf/filled.form');
+SELECT parse_filename(source_file), Name_First, Name_Last FROM read_pdf('__TEST_DIR__/../../pdf/filled.form');
 ----
 filled.form	Merluzzo	Maurizio
 
@@ -83,7 +94,7 @@ SELECT * FROM read_pdf('__TEST_DIR__/../../pdf/bad/*.pdf');
 
 # With ignore_errors=true, the corrupt file is skipped and the good file is returned
 query III
-SELECT source_file, Name_First, Name_Last
+SELECT parse_filename(source_file), Name_First, Name_Last
 FROM read_pdf('__TEST_DIR__/../../pdf/bad/*.pdf', ignore_errors=true);
 ----
 filled.pdf	Merluzzo	Maurizio
@@ -94,7 +105,7 @@ filled.pdf	Merluzzo	Maurizio
 
 # The password parameter is accepted for an unencrypted file and does not affect the result
 query III
-SELECT source_file, Name_First, Name_Last
+SELECT parse_filename(source_file), Name_First, Name_Last
 FROM read_pdf('__TEST_DIR__/../../pdf/filled.pdf', password='irrelevant');
 ----
 filled.pdf	Merluzzo	Maurizio
@@ -126,7 +137,7 @@ SELECT count(*) FROM duckdb_secrets() WHERE name = 'test_pdf_secret';
 # An unencrypted file is still readable when a matching secret exists
 # (the password is passed to qpdf, which ignores it for unencrypted files)
 query III
-SELECT source_file, Name_First, Name_Last
+SELECT parse_filename(source_file), Name_First, Name_Last
 FROM read_pdf('__TEST_DIR__/../../pdf/filled.pdf');
 ----
 filled.pdf	Merluzzo	Maurizio
@@ -146,7 +157,7 @@ DROP SECRET test_pdf_secret;
 
 ## -- correct password via parameter --
 ## query III
-## SELECT source_file, Name_First, Name_Last
+## SELECT parse_filename(source_file), Name_First, Name_Last
 ## FROM read_pdf('__TEST_DIR__/../../pdf/encrypted.pdf', password='testpass');
 ## ----
 ## encrypted.pdf	Merluzzo	Maurizio
@@ -165,7 +176,7 @@ DROP SECRET test_pdf_secret;
 ## );
 ##
 ## query III
-## SELECT source_file, Name_First, Name_Last
+## SELECT parse_filename(source_file), Name_First, Name_Last
 ## FROM read_pdf('__TEST_DIR__/../../pdf/encrypted.pdf');
 ## ----
 ## encrypted.pdf	Merluzzo	Maurizio
@@ -182,7 +193,7 @@ DROP SECRET test_pdf_secret;
 ## );
 ##
 ## query III
-## SELECT source_file, Name_First, Name_Last
+## SELECT parse_filename(source_file), Name_First, Name_Last
 ## FROM read_pdf('__TEST_DIR__/../../pdf/encrypted.pdf', password='testpass');
 ## ----
 ## encrypted.pdf	Merluzzo	Maurizio
